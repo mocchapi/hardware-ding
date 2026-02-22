@@ -1,15 +1,18 @@
 #include <wifi.h>
 #include <mqtt.h>
 
+//// Stuff you may wanna change
+
 // Set amount of switches in use
 const int SWITCH_COUNT = 5;
 // Amount of pages (action layers)
 const int PAGE_COUNT = 2;
-// Values lower than this are considered touched
-const uint32_t TOUCH_THRESHOLD = 10;
+// Values higher than this are considered touched
+const uint32_t TOUCH_THRESHOLD = 3000;
 
 
 
+//// Structs
 
 // PINs for a single switch
 struct Switch {
@@ -95,11 +98,11 @@ void loop() {
   // Poll switches & run callbacks
   update_switches();
 
-  sleep(0.1);
+  delay(0.1);
 }
 
 bool is_touched(int pin) {
-  return touchRead(pin) < TOUCH_THRESHOLD;
+  return touchRead(pin) > TOUCH_THRESHOLD;
 }
 
 // Reads switch states & runs callbacks if theres a change
