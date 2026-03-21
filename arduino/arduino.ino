@@ -89,8 +89,6 @@ volatile bool was_touched[SWITCH_COUNT] = {};
 
 PanelRotary rotary;
 
-bool something_touched = false;
-
 // Oled display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -138,9 +136,7 @@ void setup() {
 
     pinMode(target.up, INPUT_PULLUP);
     pinMode(target.down, INPUT_PULLUP);
-    int ID = i;x
-    touchAttachInterruptArg(target.touch, touch_interrupt, &ID, TOUCH_THRESHOLD);
-    // touchAttachInterrupt(target.touch, touch_interrupt_test, TOUCH_THRESHOLD);
+    touchAttachInterruptArg(target.touch, touch_interrupt, (void*)&was_touched[i], TOUCH_THRESHOLD);
 
 
     // Poll initial state
@@ -160,13 +156,10 @@ void setup() {
   };
 }
 
-void touch_interrupt(void* id_pointer) {
-  int id = *((int *) id_pointer);
-  was_touched[id] = true;
+void touch_interrupt(void* pointer) {
+  *((volatile bool*) pointer) = true;
 }
-void touch_interrupt_test() {
-  something_touched = true;
-}
+
 void draw_circles(int selected = 0, int amount=SWITCH_COUNT, uint16_t radius=8) {
   uint16_t y = SCREEN_HEIGHT/3 * 2;
 
@@ -196,12 +189,6 @@ void draw_circles(int selected = 0, int amount=SWITCH_COUNT, uint16_t radius=8) 
 }
 
 void loop() {
-  if (something_touched) {
-    Serial.println("!!!!!!! oh shit");
-    something_touched = false;
-  }
-
-
   for (int i=0; i < SWITCH_COUNT; i++) {
     if (was_touched[i]) {
       Serial.print(i);
