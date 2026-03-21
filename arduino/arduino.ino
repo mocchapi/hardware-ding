@@ -12,9 +12,9 @@
 // Set amount of switches in use
 const int SWITCH_COUNT = 5;
 // Amount of pages (action layers)
-const int PAGE_COUNT = 2;
+const int PAGE_COUNT = 1;
 // Values higher than this are considered touched
-const uint32_t TOUCH_THRESHOLD = 3000;
+const uint32_t TOUCH_THRESHOLD = 0;
 
 // OLED pins
 const int SCREEN_SDA = 11;
@@ -89,6 +89,8 @@ volatile bool was_touched[SWITCH_COUNT] = {};
 
 PanelRotary rotary;
 
+bool something_touched = false;
+
 // Oled display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
@@ -114,6 +116,7 @@ void setup() {
     while (true); // Stop execution if display fails to initialize
     // (or not? seems to never fail despite HW fail)
   }
+  display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
 
@@ -123,20 +126,22 @@ void setup() {
     was_touched[i] = false;
     target.id = i;
 
-    Serial.print("Registering switch ");
-    Serial.print(i);
-    Serial.println(" with pins:");
-    Serial.print("  up: ");
-    Serial.println(target.up);
-    Serial.print("  down: ");
-    Serial.println(target.down);
-    Serial.print("  touch: ");
-    Serial.println(target.touch);
+    // Serial.print("Registering switch ");
+    // Serial.print(i);
+    // Serial.println(" with pins:");
+    // Serial.print("  up: ");
+    // Serial.println(target.up);
+    // Serial.print("  down: ");
+    // Serial.println(target.down);
+    // Serial.print("  touch: ");
+    // Serial.println(target.touch);
 
     pinMode(target.up, INPUT_PULLUP);
     pinMode(target.down, INPUT_PULLUP);
-    int ID = i;
-    //touchAttachInterruptArg(target.touch, touch_interrupt, &ID, TOUCH_THRESHOLD);
+    int ID = i;x
+    touchAttachInterruptArg(target.touch, touch_interrupt, &ID, TOUCH_THRESHOLD);
+    // touchAttachInterrupt(target.touch, touch_interrupt_test, TOUCH_THRESHOLD);
+
 
     // Poll initial state
     switch_states[i] = poll_switch(target);
@@ -159,19 +164,21 @@ void touch_interrupt(void* id_pointer) {
   int id = *((int *) id_pointer);
   was_touched[id] = true;
 }
-
+void touch_interrupt_test() {
+  something_touched = true;
+}
 void draw_circles(int selected = 0, int amount=SWITCH_COUNT, uint16_t radius=8) {
   uint16_t y = SCREEN_HEIGHT/3 * 2;
 
-  Serial.print("draw_circles (");
-  Serial.print(selected);
-  Serial.print(", ");
-  Serial.print(amount);
-  Serial.print(", ");
-  Serial.print(radius);
-  Serial.print(", ");
-  Serial.print(y);
-  Serial.println(")");
+  // Serial.print("draw_circles (");
+  // Serial.print(selected);
+  // Serial.print(", ");
+  // Serial.print(amount);
+  // Serial.print(", ");
+  // Serial.print(radius);
+  // Serial.print(", ");
+  // Serial.print(y);
+  // Serial.println(")");
 
   for (int i=0; i < SWITCH_COUNT; i++) {
     uint16_t x = (radius*2.5 * i)+radius;
@@ -189,18 +196,35 @@ void draw_circles(int selected = 0, int amount=SWITCH_COUNT, uint16_t radius=8) 
 }
 
 void loop() {
-  display.clearDisplay();
-  display.setCursor(0, 0);
-
-  for (int i=0; i < SWITCH_COUNT; i++) {
-    display.clearDisplay();
-    draw_circles(i);
-    display.display();
-    delay(400);
+  if (something_touched) {
+    Serial.println("!!!!!!! oh shit");
+    something_touched = false;
   }
 
+
+  for (int i=0; i < SWITCH_COUNT; i++) {
+    if (was_touched[i]) {
+      Serial.print(i);
+      Serial.println(" was touched!");
+      was_touched[i] = false;
+    }
+  }
+
+  delay(100);
+  return;
+
+  // display.clearDisplay();
+  // display.setCursor(0, 0);
+
+  //for (int i=0; i < SWITCH_COUNT; i++) {
+  //  display.clearDisplay();
+  //  draw_circles(i);
+  //  display.display();
+  //  delay(400);
+  //}
+
   // put your main code here, to run repeatedly:
-  Serial.println("loop.");
+  // Serial.println("loop.");
 
   // Poll switches & run callbacks
   update_switches();
@@ -211,7 +235,7 @@ void loop() {
 
 // Reads switch states & runs callbacks if theres a change
 void update_switches() {
-  Serial.println("Update switches");
+  // Serial.println("Update switches");
   for (int i=0; i < SWITCH_COUNT; i++) {
     PanelSwitch target = switches[i];
     Page page = pages[current_page];
@@ -221,11 +245,19 @@ void update_switches() {
     // Get current state
     PanelSwitchState new_state = poll_switch(target);
 
+    if (new_state.touch) {
+      Serial.print("TOUCHED: ");
+      Serial.println(i);
+    }
+    // Serial.print("CHECKING SWITCH ");
+    // Serial.println(i);
+    // print_switch_state(new_state);
+    // Serial.println("");
+
     maybe_run_callbacks(&action, prev_state, new_state);
 
     // Update state array with new data
     switch_states[i] = new_state;
-    was_touched[i] = false;
   }
 }
 
@@ -293,6 +325,7 @@ void default_touch_callback(Action* action, PanelSwitchState prev_state, PanelSw
     display.clearDisplay();
     set_screen_text(action->name, action->switch_description);
     draw_circles(new_state.id);
+    display.display();
   }
 }
 
