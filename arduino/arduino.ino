@@ -19,7 +19,7 @@ const uint32_t TOUCH_THRESHOLD = 3000;
 // OLED pins
 const int SCREEN_SDA = 11;
 const int SCREEN_SCL = 12;
-// OLED i2c address 
+// OLED i2c address
 //const int SCREEN_ADDRESS = 0x78;
 const int SCREEN_ADDRESS = 0x3C;
 // OLED dimensions
@@ -58,7 +58,7 @@ struct Action {
   String switch_description = ""; // Description to display when switch is touched
   String rotary_description = ""; // Description to display when switch is touched first, and then rotary encoder is touched
   bool uses_rotary;
-  
+
   void (*rotary_callback)(Action* action, float change, bool is_pressed); // Called when rotary encoder is changed
   void (*switch_callback)(Action* action, PanelSwitchState prev_state, PanelSwitchState new_state); // Called when the switch state changes (moved up/down/neutral)
   void (*touch_callback)(Action* action, PanelSwitchState prev_state, PanelSwitchState new_state); // Called when the switch is touched
@@ -77,12 +77,17 @@ const PanelSwitch switches[SWITCH_COUNT] = {
   PanelSwitch{38,37, 5},
   PanelSwitch{38,37, 6},
 };
+
+
+// State
+int current_page = 0;
+Page pages[PAGE_COUNT] = {};
+
 PanelSwitchState switch_states[SWITCH_COUNT] = {};
 
+volatile bool was_touched[SWITCH_COUNT] = {};
+
 PanelRotary rotary;
-Page pages[PAGE_COUNT] = {};
-bool CHECK_TOUCH[PAGE_COUNT] = {};
-int current_page = 0;
 
 // Oled display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
@@ -115,7 +120,7 @@ void setup() {
   // Initialise pinmodes for each switch
   for (int i = 0; i < SWITCH_COUNT; i++) {
     PanelSwitch target = switches[i];
-    CHECK_TOUCH[i] = false;
+    was_touched[i] = false;
     target.id = i;
 
     Serial.print("Registering switch ");
@@ -152,7 +157,7 @@ void setup() {
 
 void touch_interrupt(void* id_pointer) {
   int id = *((int *) id_pointer);
-  CHECK_TOUCH[id] = true;
+  was_touched[id] = true;
 }
 
 void draw_circles(int selected = 0, int amount=SWITCH_COUNT, uint16_t radius=8) {
@@ -211,7 +216,7 @@ void update_switches() {
     PanelSwitch target = switches[i];
     Page page = pages[current_page];
     Action action = page.actions[i];
-    
+
     PanelSwitchState prev_state = switch_states[i];
     // Get current state
     PanelSwitchState new_state = poll_switch(target);
@@ -220,7 +225,7 @@ void update_switches() {
 
     // Update state array with new data
     switch_states[i] = new_state;
-    CHECK_TOUCH[i] = false;
+    was_touched[i] = false;
   }
 }
 
@@ -241,8 +246,8 @@ bool is_touched(int pin) {
 }
 
 PanelSwitchState poll_switch(PanelSwitch target) {
-  bool touched = CHECK_TOUCH[target.id];
-  CHECK_TOUCH[target.id] = false;
+  bool touched = was_touched[target.id];
+  was_touched[target.id] = false;
 
   return PanelSwitchState{
     digitalRead(target.up) == HIGH,
