@@ -1,5 +1,5 @@
-#include <wifi.h>
-#include <mqtt.h>
+// #include <wifi.h>
+// #include <mqtt.h>
 #include <Matter.h>
 
 #include <Wire.h>
@@ -38,14 +38,13 @@ struct PanelSwitch {
   int up;
   int down;
   int touch;
-  int id=0;
 };
+
 // current state of a switch, where true being pressed down
 struct PanelSwitchState {
   bool up;
   bool down;
   bool touch;
-  int id=0;
 };
 
 // Attaches functionality to a switch+rotary
@@ -76,14 +75,14 @@ const PanelSwitch switches[SWITCH_COUNT] = {
 
 
 // State
-int current_page = 0;
 
 // Filled in setup
 Page pages[PAGE_COUNT] = {};
 
 // Runtime
+int current_page = 0;
 volatile bool was_touched[SWITCH_COUNT] = {};
-PanelSwitchState switch_states[SWITCH_COUNT] = {};
+PanelSwitchState previous_switch_state[SWITCH_COUNT] = {};
 
 // Components
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
@@ -123,26 +122,25 @@ void setup() {
 
   // Initialise pinmodes for each switch
   for (int i = 0; i < SWITCH_COUNT; i++) {
-    PanelSwitch target = switches[i];
+    PanelSwitch panel_switch = switches[i];
     was_touched[i] = false;
-    target.id = i;
 
     Serial.print("Registering switch ");
     Serial.print(i);
     Serial.println(" with pins:");
     Serial.print("  up: ");
-    Serial.println(target.up);
+    Serial.println(panel_switch.up);
     Serial.print("  down: ");
-    Serial.println(target.down);
+    Serial.println(panel_switch.down);
     Serial.print("  touch: ");
-    Serial.println(target.touch);
+    Serial.println(panel_switch.touch);
 
-    pinMode(target.up, INPUT_PULLUP);
-    pinMode(target.down, INPUT_PULLUP);
-    touchAttachInterruptArg(target.touch, touch_interrupt, (void*)&was_touched[i], TOUCH_THRESHOLD);
+    pinMode(panel_switch.up, INPUT_PULLUP);
+    pinMode(panel_switch.down, INPUT_PULLUP);
+    touchAttachInterruptArg(panel_switch.touch, touch_interrupt, (void*)&was_touched[i], TOUCH_THRESHOLD);
 
     // Poll initial state
-    switch_states[i] = poll_switch(target);
+    previous_switch_state[i] = poll_switch(i);
   }
 
   // Define pages & actions
@@ -162,7 +160,7 @@ void touch_interrupt(void* pointer) {
   *((volatile bool*) pointer) = true;
 }
 
-void draw_circles(int selected = 0, int amount=SWITCH_COUNT, uint16_t radius=8) {
+void draw_circles(int selected = -1, int amount=SWITCH_COUNT, uint16_t radius=8) {
   uint16_t y = SCREEN_HEIGHT/3 * 2;
 
   // Serial.print("draw_circles (");
@@ -224,6 +222,7 @@ void loop() {
   // Serial.println("loop.");
 
   // Poll switches & run callbacks
+  draw_circles();
   update_switches();
 
   display.display();
@@ -236,17 +235,18 @@ void loop() {
 void update_switches() {
   // Serial.println("Update switches");
   for (int i=0; i < SWITCH_COUNT; i++) {
-    PanelSwitch target = switches[i];
+    PanelSwitch panel_switch = switches[i];
     Page page = pages[current_page];
     Action action = page.actions[i];
 
-    PanelSwitchState prev_state = switch_states[i];
+    PanelSwitchState prev_state = previous_switch_state[i];
     // Get current state
-    PanelSwitchState new_state = poll_switch(target);
+    PanelSwitchState new_state = poll_switch(i);
 
     if (new_state.touch) {
       Serial.print("TOUCHED: ");
       Serial.println(i);
+      draw_circles(i);
     }
     // Serial.print("CHECKING SWITCH ");
     // Serial.println(i);
@@ -256,7 +256,7 @@ void update_switches() {
     maybe_run_callbacks(&action, prev_state, new_state);
 
     // Update state array with new data
-    switch_states[i] = new_state;
+    previous_switch_state[i] = new_state;
   }
 }
 
@@ -272,38 +272,32 @@ void maybe_run_callbacks(Action* action, PanelSwitchState prev_state, PanelSwitc
   }
 }
 
-bool is_touched(int pin) {
-  return touchRead(pin) > TOUCH_THRESHOLD;
-}
+PanelSwitchState poll_switch(int switch_index) {
+  PanelSwitch panel_switch = switches[switch_index];
 
-PanelSwitchState poll_switch(PanelSwitch target) {
-  bool touched = was_touched[target.id];
-  was_touched[target.id] = false;
+  bool touched = was_touched[switch_index];
+  was_touched[switch_index] = false;
 
   return PanelSwitchState{
-    digitalRead(target.up) == HIGH,
-    digitalRead(target.down) == HIGH,
+    digitalRead(panel_switch.up) == HIGH,
+    digitalRead(panel_switch.down) == HIGH,
     touched,
-    target.id,
   };
 }
 
-
 void set_screen_text(String title, String description = "") {
-  display.setTextSize(2);
+  display.setTextSize(1);
   display.setCursor(0,0);
   display.print(title);
 
   display.setTextSize(1);
-  display.setCursor(2,0);
+  display.setCursor(0,20);
   display.print(description);
 
   display.display();
 }
 
 void print_switch_state(PanelSwitchState state) {
-  Serial.print("ID: ");
-  Serial.print(state.id);
   Serial.print(", UP: ");
   Serial.print(state.up);
 
@@ -323,7 +317,6 @@ void default_touch_callback(Action* action, PanelSwitchState prev_state, PanelSw
   if (new_state.touch) {
     // display.clearDisplay();
     set_screen_text(action->name, action->switch_description);
-    draw_circles(new_state.id);
     // display.display();
   }
 }
