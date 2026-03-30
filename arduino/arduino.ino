@@ -5,7 +5,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-
+#include <RotaryEncoderPCNT.h>
 
 //// Stuff you may wanna change
 
@@ -16,11 +16,15 @@ const int PAGE_COUNT = 1;
 // Values higher than this are considered touched
 const uint32_t TOUCH_THRESHOLD = 0;
 
+// Rotary encoder pins
+const int ROTARY_A = 38;
+const int ROTARY_B = 39;
+const int ROTARY_BTN = 40;
+
 // OLED pins
 const int SCREEN_SDA = 11;
 const int SCREEN_SCL = 12;
 // OLED i2c address
-//const int SCREEN_ADDRESS = 0x78;
 const int SCREEN_ADDRESS = 0x3C;
 // OLED dimensions
 const int SCREEN_WIDTH = 128;
@@ -36,21 +40,13 @@ struct PanelSwitch {
   int touch;
   int id=0;
 };
-// For detecting changes in switch state between polls
+// current state of a switch, where true being pressed down
 struct PanelSwitchState {
   bool up;
   bool down;
   bool touch;
   int id=0;
 };
-
-// PINs for a single rotary encoder
-struct PanelRotary {
-  int a;
-  int b;
-  int press; // Button pin
-};
-// TODO: RotaryState, probably do hardware monitoring
 
 // Attaches functionality to a switch+rotary
 struct Action {
@@ -71,33 +67,40 @@ struct Page {
 
 
 const PanelSwitch switches[SWITCH_COUNT] = {
-  PanelSwitch{38,37, 1},
-  PanelSwitch{38,37, 2},
-  PanelSwitch{38,37, 4},
-  PanelSwitch{38,37, 5},
-  PanelSwitch{38,37, 6},
+  PanelSwitch{36,35, 1},
+  PanelSwitch{34,33, 2},
+  PanelSwitch{18,17, 4},
+  PanelSwitch{16,15, 5},
+  PanelSwitch{14,13, 6},
 };
 
 
 // State
 int current_page = 0;
+
+// Filled in setup
 Page pages[PAGE_COUNT] = {};
 
+// Runtime
+volatile bool was_touched[SWITCH_COUNT] = {};
 PanelSwitchState switch_states[SWITCH_COUNT] = {};
 
-volatile bool was_touched[SWITCH_COUNT] = {};
-
-PanelRotary rotary;
-
-// Oled display
+// Components
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+RotaryEncoderPCNT rotary(ROTARY_A, ROTARY_B);
+
 
 void setup() {
   // Init serial, send some signs of life*0.8
   Serial.begin(9600);
+  delay(100);
   Serial.println("Hardware-ding v0.0.0");
   Serial.print(SWITCH_COUNT);
   Serial.println(" switches, 1 rotary encoder, 1 display");
+
+  pinMode(ROTARY_A, INPUT_PULLUP);
+  pinMode(ROTARY_B, INPUT_PULLUP);
+  pinMode(ROTARY_BTN, INPUT_PULLUP);
 
   // Initialise OLED display
   Serial.println("Screen init:");
@@ -124,20 +127,19 @@ void setup() {
     was_touched[i] = false;
     target.id = i;
 
-    // Serial.print("Registering switch ");
-    // Serial.print(i);
-    // Serial.println(" with pins:");
-    // Serial.print("  up: ");
-    // Serial.println(target.up);
-    // Serial.print("  down: ");
-    // Serial.println(target.down);
-    // Serial.print("  touch: ");
-    // Serial.println(target.touch);
+    Serial.print("Registering switch ");
+    Serial.print(i);
+    Serial.println(" with pins:");
+    Serial.print("  up: ");
+    Serial.println(target.up);
+    Serial.print("  down: ");
+    Serial.println(target.down);
+    Serial.print("  touch: ");
+    Serial.println(target.touch);
 
     pinMode(target.up, INPUT_PULLUP);
     pinMode(target.down, INPUT_PULLUP);
     touchAttachInterruptArg(target.touch, touch_interrupt, (void*)&was_touched[i], TOUCH_THRESHOLD);
-
 
     // Poll initial state
     switch_states[i] = poll_switch(target);
@@ -189,32 +191,42 @@ void draw_circles(int selected = 0, int amount=SWITCH_COUNT, uint16_t radius=8) 
 }
 
 void loop() {
-  for (int i=0; i < SWITCH_COUNT; i++) {
-    if (was_touched[i]) {
-      Serial.print(i);
-      Serial.println(" was touched!");
-      was_touched[i] = false;
-    }
-  }
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.print(rotary.position());
+  //Serial.print(rotary.position());
+  //Serial.print(" :: ");
+  //Serial.println(digitalRead(ROTARY_BTN));
+  // delay(50);
 
-  delay(100);
-  return;
+  // for (int i=0; i < SWITCH_COUNT; i++) {
+  //   if (was_touched[i]) {
+  //     Serial.print(i);
+  //     Serial.println(" was touched!");
+  //     was_touched[i] = false;
+  //     //display.clearDisplay();
+  //     draw_circles(i);
+  //   }
+  // }
 
-  // display.clearDisplay();
-  // display.setCursor(0, 0);
 
-  //for (int i=0; i < SWITCH_COUNT; i++) {
+  // for (int i=0; i < SWITCH_COUNT; i++) {
   //  display.clearDisplay();
   //  draw_circles(i);
   //  display.display();
-  //  delay(400);
-  //}
+  //  delay(50);
+  // }
+
+  // display.clearDisplay();
+  // display.setCursor(0, 0);
 
   // put your main code here, to run repeatedly:
   // Serial.println("loop.");
 
   // Poll switches & run callbacks
   update_switches();
+
+  display.display();
 
   delay(100);
 }
@@ -309,10 +321,10 @@ void default_rotary_callback(Action* action, float change, bool is_pressed) {
 
 void default_touch_callback(Action* action, PanelSwitchState prev_state, PanelSwitchState new_state) {
   if (new_state.touch) {
-    display.clearDisplay();
+    // display.clearDisplay();
     set_screen_text(action->name, action->switch_description);
     draw_circles(new_state.id);
-    display.display();
+    // display.display();
   }
 }
 
